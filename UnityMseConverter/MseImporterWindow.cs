@@ -142,6 +142,52 @@ namespace UnityMseConverter
                 var childObj = new GameObject($"ParticleGroup_{i}");
                 childObj.transform.SetParent(rootObj.transform, false);
 
+                // Pozisyon keyframe'leri
+                if (group.PositionKeyframes.Count == 1)
+                {
+                    childObj.transform.localPosition =
+                        group.PositionKeyframes[0].Position.ToUnityVector3() * scaleFactor;
+                }
+                else if (group.PositionKeyframes.Count > 1)
+                {
+                    var clip = new AnimationClip();
+                    clip.name = $"PosAnim_Group{i}";
+                    clip.legacy = true;
+
+                    var curveX = new AnimationCurve();
+                    var curveY = new AnimationCurve();
+                    var curveZ = new AnimationCurve();
+
+                    float duration = emitter.CycleLength > 0 ? emitter.CycleLength : 1f;
+                    foreach (var kf in group.PositionKeyframes)
+                    {
+                        float t = kf.Time * duration;
+                        var pos = kf.Position.ToUnityVector3() * scaleFactor;
+                        curveX.AddKey(new Keyframe(t, pos.x));
+                        curveY.AddKey(new Keyframe(t, pos.y));
+                        curveZ.AddKey(new Keyframe(t, pos.z));
+                    }
+
+                    clip.SetCurve("", typeof(Transform), "localPosition.x", curveX);
+                    clip.SetCurve("", typeof(Transform), "localPosition.y", curveY);
+                    clip.SetCurve("", typeof(Transform), "localPosition.z", curveZ);
+
+                    if (emitter.CycleLoopEnable)
+                        clip.wrapMode = WrapMode.Loop;
+
+                    if (!needsMeshFolder)
+                    {
+                        EnsureFolderExists(meshesFolder);
+                        needsMeshFolder = true;
+                    }
+                    string clipPath = $"{meshesFolder}/PosAnim_Group{i}.anim";
+                    AssetDatabase.CreateAsset(clip, clipPath);
+
+                    var anim = childObj.AddComponent<Animation>();
+                    anim.clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
+                    anim.playAutomatically = true;
+                }
+
                 var ps = childObj.AddComponent<ParticleSystem>();
                 var psRenderer = childObj.GetComponent<ParticleSystemRenderer>();
 
@@ -163,8 +209,9 @@ namespace UnityMseConverter
                 if (emitter.TimeEventLifeTime.Count == 1)
                     main.startLifetime = emitter.TimeEventLifeTime[0].Value;
                 else if (emitter.TimeEventLifeTime.Count > 1)
-                    main.startLifetime = new ParticleSystem.MinMaxCurve(1f,
-                        TimeEventsToAnimationCurve(emitter.TimeEventLifeTime));
+                    main.startLifetime = new ParticleSystem.MinMaxCurve(
+                        GetMaxValue(emitter.TimeEventLifeTime),
+                        TimeEventsToNormalizedCurve(emitter.TimeEventLifeTime));
 
                 // Speed
                 if (emitter.TimeEventEmittingVelocity.Count == 1)
@@ -172,7 +219,7 @@ namespace UnityMseConverter
                 else if (emitter.TimeEventEmittingVelocity.Count > 1)
                     main.startSpeed = new ParticleSystem.MinMaxCurve(
                         GetMaxValue(emitter.TimeEventEmittingVelocity) * scaleFactor,
-                        TimeEventsToAnimationCurve(emitter.TimeEventEmittingVelocity, scaleFactor));
+                        TimeEventsToNormalizedCurve(emitter.TimeEventEmittingVelocity));
 
                 // Size
                 if (emitter.TimeEventSizeX.Count > 0 || emitter.TimeEventSizeY.Count > 0)
@@ -183,14 +230,14 @@ namespace UnityMseConverter
                     else if (emitter.TimeEventSizeX.Count > 1)
                         main.startSizeX = new ParticleSystem.MinMaxCurve(
                             GetMaxValue(emitter.TimeEventSizeX) * scaleFactor,
-                            TimeEventsToAnimationCurve(emitter.TimeEventSizeX, scaleFactor));
+                            TimeEventsToNormalizedCurve(emitter.TimeEventSizeX));
 
                     if (emitter.TimeEventSizeY.Count == 1)
                         main.startSizeY = emitter.TimeEventSizeY[0].Value * scaleFactor;
                     else if (emitter.TimeEventSizeY.Count > 1)
                         main.startSizeY = new ParticleSystem.MinMaxCurve(
                             GetMaxValue(emitter.TimeEventSizeY) * scaleFactor,
-                            TimeEventsToAnimationCurve(emitter.TimeEventSizeY, scaleFactor));
+                            TimeEventsToNormalizedCurve(emitter.TimeEventSizeY));
                 }
 
                 // --- Emission ---
@@ -202,7 +249,7 @@ namespace UnityMseConverter
                 else if (emitter.TimeEventEmissionCountPerSecond.Count > 1)
                     emission.rateOverTime = new ParticleSystem.MinMaxCurve(
                         GetMaxValue(emitter.TimeEventEmissionCountPerSecond),
-                        TimeEventsToAnimationCurve(emitter.TimeEventEmissionCountPerSecond));
+                        TimeEventsToNormalizedCurve(emitter.TimeEventEmissionCountPerSecond));
 
                 // --- Shape ---
                 var shape = ps.shape;
@@ -356,7 +403,7 @@ namespace UnityMseConverter
                 else if (particle.TimeEventGravity.Count > 1)
                     main.gravityModifier = new ParticleSystem.MinMaxCurve(
                         GetMaxValue(particle.TimeEventGravity) * scaleFactor,
-                        TimeEventsToAnimationCurve(particle.TimeEventGravity, scaleFactor));
+                        TimeEventsToNormalizedCurve(particle.TimeEventGravity));
 
                 // --- Air Resistance ---
                 if (particle.TimeEventAirResistance.Count > 0)
@@ -497,8 +544,9 @@ namespace UnityMseConverter
                 case 1:
                     rot.enabled = true;
                     if (particle.TimeEventRotation.Count > 0)
-                        rot.z = new ParticleSystem.MinMaxCurve(Mathf.Deg2Rad,
-                            TimeEventsToAnimationCurve(particle.TimeEventRotation));
+                        rot.z = new ParticleSystem.MinMaxCurve(
+                            GetMaxValue(particle.TimeEventRotation) * Mathf.Deg2Rad,
+                            TimeEventsToNormalizedCurve(particle.TimeEventRotation));
                     break;
                 case 2:
                     main.startRotation = new ParticleSystem.MinMaxCurve(
