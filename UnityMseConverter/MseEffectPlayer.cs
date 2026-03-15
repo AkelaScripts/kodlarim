@@ -40,7 +40,14 @@ namespace UnityMseConverter
         {
             ClearExisting();
 
+            if (!File.Exists(filePath))
+            {
+                Debug.LogError($"[MseEffectPlayer] Dosya bulunamadı: {filePath}");
+                return;
+            }
+
             effectData = MseParser.ParseFromFile(filePath);
+            Debug.Log($"[MseEffectPlayer] '{filePath}' yüklendi: {effectData.ParticleGroups.Count} grup bulundu");
 
             for (int i = 0; i < effectData.ParticleGroups.Count; i++)
             {
@@ -56,7 +63,14 @@ namespace UnityMseConverter
         {
             ClearExisting();
 
+            if (string.IsNullOrWhiteSpace(mseContent))
+            {
+                Debug.LogError("[MseEffectPlayer] MSE içeriği boş!");
+                return;
+            }
+
             effectData = MseParser.ParseFromString(mseContent);
+            Debug.Log($"[MseEffectPlayer] String'den yüklendi: {effectData.ParticleGroups.Count} grup bulundu");
 
             for (int i = 0; i < effectData.ParticleGroups.Count; i++)
             {
@@ -127,6 +141,19 @@ namespace UnityMseConverter
             {
                 StartCoroutine(AnimatePosition(childObj.transform, group.PositionKeyframes));
             }
+
+            // --- Debug Log ---
+            Debug.Log($"[MseEffectPlayer] ParticleGroup_{groupIndex} oluşturuldu: " +
+                $"Shape={emitter.EmitterShape}, Billboard={particle.BillboardType}, " +
+                $"Blend={particle.SrcBlendType}/{particle.DestBlendType}, " +
+                $"Emission={emitter.TimeEventEmissionCountPerSecond.Count} event, " +
+                $"Lifetime={emitter.TimeEventLifeTime.Count} event, " +
+                $"Duration={emitter.CycleLength}, Loop={emitter.CycleLoopEnable}, " +
+                $"Textures={particle.TextureFiles.Count}");
+
+            // --- ParticleSystem'i başlat ---
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            ps.Play(true);
         }
 
         #region Main Module
@@ -140,12 +167,17 @@ namespace UnityMseConverter
             main.duration = emitter.CycleLength;
             main.loop = emitter.CycleLoopEnable;
             main.maxParticles = emitter.MaxEmissionCount;
-            main.playOnAwake = true;
+            main.playOnAwake = false; // Manuel Play() ile başlatılacak
             main.simulationSpace = group.ParticleProperty.AttachEnable
                 ? ParticleSystemSimulationSpace.Local
                 : ParticleSystemSimulationSpace.World;
 
-            // StartLifetime: TimeEventLifeTime'dan ilk değeri al
+            // Güvenli varsayılanlar (MSE'de değer yoksa bile parçacık görünsün)
+            main.startLifetime = 2f;
+            main.startSpeed = 1f;
+            main.startSize = 0.5f;
+
+            // StartLifetime: TimeEventLifeTime'dan
             if (emitter.TimeEventLifeTime.Count > 0)
             {
                 if (emitter.TimeEventLifeTime.Count == 1)
@@ -207,6 +239,7 @@ namespace UnityMseConverter
         {
             var emission = ps.emission;
             emission.enabled = true;
+            emission.rateOverTime = 10f; // Varsayılan (MSE'de değer yoksa)
 
             if (emitter.TimeEventEmissionCountPerSecond.Count > 0)
             {
