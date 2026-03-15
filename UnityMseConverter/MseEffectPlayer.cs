@@ -117,10 +117,9 @@ namespace UnityMseConverter
             // --- Stretch ---
             if (particle.StretchEnable)
             {
-                renderer.renderMode = ParticleSystemRenderMode.StretchedBillboard;
-                renderer.velocityScale = 0f;
+                renderer.renderMode = ParticleSystemRenderMode.Stretch;
+                renderer.velocityScale = 0.5f;
                 renderer.lengthScale = 1f;
-                renderer.speedScale = 0.5f;
             }
 
             // --- Pozisyon Animasyonu ---
